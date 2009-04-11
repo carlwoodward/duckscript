@@ -13,22 +13,32 @@ ometa DSParser {
   idRest  = idFirst | digit,
   identifier = firstAndRest(`idFirst, `idRest):i                              -> [`idn, i.join('')],
   
-  // use when you want to reduce [`idn, 'foo'] to just `foo
+  // reduces [`idn, 'foo'] to just `foo
   name = identifier:i                                                         -> i[1],
   
-  // same as: ":" "idn":i
   symbol = ':' identifier:i                                                   -> [`sym, i[1]],
   
   literal = symbol | string | integer,
   
   exp = fcall | vcall | literal,
-  exp_end = end | ',' | '\n' | ';',
+  exp_end = end | ',' | '\n' | ';' | '}',
   
-  // supports vcalls and literals
-  array = exp:first ((spaces ',' spaces exp) | (spaces literal))*:rest        -> [`arr, first].concat(rest),
+  // the "inside" part of an array
+  list = exp:first ((spaces ',' spaces exp) | (spaces literal))*:rest         -> [`lst, first].concat(rest),
   
   vcall = identifier:i spaces &exp_end                                        -> [`vcall, i[1]],
   
-  fcall = name:n ( '(' | spaces ) array:a ( ')' | empty) &exp_end             -> [`fcall, n].concat([a])
+  fcall = name:n ( '(' | spaces ) list:a ( ')' | empty) spaces &exp_end       -> [`fcall, n].concat([a]),
+  
+  args = name:first ((spaces ',' | empty) spaces name)*:rest                  -> [`args, first].concat(rest),
+  
+  block = exp,
+  
+  proc = '{' spaces args:ags spaces '|' spaces block:blk spaces '}'           -> [`proc, ags, blk]
+  
+  // todo: array literals
+  // todo: dct
+  // todo: hash literals
+  // procs
   
 }
