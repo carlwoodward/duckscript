@@ -1,0 +1,228 @@
+<body>
+
+<style>
+body { width: 700px; margin: 30px auto; }
+.pass { color: green; }
+.fail { color: red; }
+</style>
+
+<script src="ometa-r45/lib.js"></script>
+<script src="ometa-r45/ometa-base.js"></script>
+<script src="ometa-r45/parser.js"></script>
+<script src="ometa-r45/bs-js-compiler.js"></script>
+<script src="ometa-r45/bs-ometa-compiler.js"></script>
+<script src="ometa-r45/bs-ometa-optimizer.js"></script>
+<script src="ometa-r45/bs-ometa-js-compiler.js"></script>
+
+<script>
+function translateCode(s) {
+  var translationError = function(m, i) { alert("Translation error - please tell Alex about this!"); throw fail },
+      tree             = BSOMetaJSParser.matchAll(s, "topLevel", undefined, function(m, i) { throw fail.delegated({errorPos: i}) })
+  return BSOMetaJSTranslator.match(tree, "trans", undefined, translationError)
+}
+function ometa(s) { return eval(translateCode(s)) }
+</script>
+
+<script type="text/x-ometa-js" id="ometa">
+
+// todo: allow more stuff as first char of symbol
+// todo: support string interpoloation
+
+ometa DSParser {
+  
+  integer = ^digit+:d                                                         -> [`int, d.join('')],
+  
+  escapeChar   = '\\' char:c                                                  -> unescape('\\' + c),
+  string       = '\'' (escapeChar | ~'\'' char)*:cs '\''                      -> [`str, cs.join('')]
+               | '"'  (escapeChar | ~'"'  char)*:cs '"'                       -> [`str, cs.join('')],
+  
+  idFirst = letter | '_',
+  idRest  = idFirst | digit,
+  identifier = firstAndRest(`idFirst, `idRest):i                              -> [`idn, i.join('')],
+  
+  // use when you want to reduce [`idn, 'foo'] to just `foo
+  name = identifier:i                                                         -> i[1],
+  
+  // same as: ":" "idn":i
+  symbol = ':' identifier:i                                                   -> [`sym, i[1]],
+  
+  literal = symbol | string | integer,
+  
+  exp = fcall | vcall | literal,
+  exp_end = end | ',' | '\n' | ';',
+  
+  // supports vcalls and literals
+  array = exp:first ((spaces ',' spaces exp) | (spaces literal))*:rest        -> [`arr, first].concat(rest),
+  
+  vcall = identifier:i spaces &exp_end                                        -> [`vcall, i[1]],
+  
+  fcall = name:n ( '(' | spaces ) array:a ( ')' | empty) &exp_end             -> [`fcall, n].concat([a])
+  
+}
+
+</script>
+
+<!-- compiles OmetaJS code above  -->
+<script>ometa(document.getElementById('ometa').innerText)</script>
+
+<script>
+function match(matcher, str, expectation) {
+  test(matcher,str,expectation,'match')
+}
+
+function matchAll(matcher, str, expectation) {
+  test(matcher,str,expectation,'matchAll')
+}
+
+function test(matcher, str, expectation, type) {
+  // todo: catch failing match
+  var result = DSParser.matchAll(str,matcher);
+  var status = result.toString() == expectation.toString() ? 'pass' : 'fail';
+  var element = document.createElement('p');
+  element.className = status;
+  element.innerHTML = result.toString();
+  document.body.appendChild(element);
+}
+</script>
+
+<script>
+// Parser tests
+
+// basic integers
+
+match('integer', '1', 
+  ['int', '1']
+);
+
+match('integer', '1234', 
+  ['int', '1234']
+);
+
+// single and double quoted strings
+
+match('string', '"somestring"', 
+  ['str', 'somestring']
+);
+
+match('string', '\'somestring\'', 
+  ['str', 'somestring']
+);
+
+// symbols
+
+match('symbol', ":bar",
+  ['sym', 'bar']
+);
+
+match('symbol', ":bar1",
+  ['sym', 'bar1']
+);
+
+// todo: :+, :- ... etc
+
+// comma separated arrays of literals
+
+match('array', "1,2,3",
+  ['arr', ['int', '1'], ['int', '2'], ['int', '3']]
+);
+
+match('array', "1 , 2 , 3",
+  ['arr', ['int', '1'], ['int', '2'], ['int', '3']]
+);
+
+// space separated arrays of literals 
+
+match('array', "1 'foo' :bar",
+  ['arr', ['int', '1'], ['str', 'foo'], ['sym', 'bar']]
+);
+
+// spaces and commas with literals
+
+match('array', "1 'foo', :bar",
+  ['arr', ['int', '1'], ['str', 'foo'], ['sym', 'bar']]
+);
+
+// variable access or function call with no receiver and no args
+
+match('vcall', 'bar',
+  ['vcall', 'bar']
+);
+
+match('vcall', 'bar;',
+  ['vcall', 'bar']
+);
+
+// literal expression
+
+match('exp', '1',
+  ['int', '1']
+);
+
+match('exp', 'bar',
+  ['vcall', 'bar']
+);
+
+// array where first element is a vcall and the rest are literals
+
+match('array', "foo, 1 :bar",
+  ['arr', ['vcall', 'foo'], ['int', '1'], ['sym', 'bar']]
+);
+
+// array of vcalls
+
+match('array', "foo, bar, baz",
+  ['arr', ['vcall', 'foo'], ['vcall', 'bar'], ['vcall', 'baz']]
+);
+
+// function call with no braces and one literal arg
+match('fcall', "foo 1",
+  ['fcall', 'foo', ['arr', ['int', 1]]]
+);
+
+// function call with braces and one literal arg
+match('fcall', "foo(1)",
+  ['fcall', 'foo', ['arr', ['int', 1]]]
+);
+
+// function call with two literal args
+match('fcall', "foo 1 :bar",
+  ['fcall', 'foo', ['arr', ['int', 1], ['sym', 'bar']]]
+);
+
+// function call with vcall arg
+match('fcall', "foo bar",
+  ['fcall', 'foo', ['arr', ['vcall', 'bar']]]
+);
+
+// function call with vcall args
+match('fcall', "foo bar, baz",
+  ['fcall', 'foo', ['arr', ['vcall', 'bar'],['vcall', 'baz']]]
+);
+
+// array with fcall element, note that the literals after foo become args to foo ... might be worth throwing a warning here
+match('array', "bar, :baz, foo 'x', 1",
+  ['arr', 
+    ['vcall', 'bar'], 
+    ['sym', 'baz'], 
+    ['fcall', 'foo', ['arr', ['str', 'x'], ['int', '1']]]
+  ]
+);
+
+// array 
+match('array', "bar, :baz, foo('x'), 1",
+  ['arr', 
+    ['vcall', 'bar'], 
+    ['sym', 'baz'], 
+    ['fcall', 'foo', ['arr', ['str', 'x']]],
+    ['int', '1']
+  ]
+);
+
+// function call with vcall and literal args
+match('fcall', "foo bar, baz, 1, :x",
+  ['fcall', 'foo', ['arr', ['vcall', 'bar'],['vcall', 'baz'],['int','1'],['sym','x']]]
+);
+
+// 
+</script>
+</body>
