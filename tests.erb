@@ -1,18 +1,35 @@
+<html><head><meta http-equiv="Content-Type" content="application/html; charset=utf-8" /></head>
 <body>
 
 <style>
-body { width: 700px; margin: 30px auto; }
-.pass { color: green; }
-.fail { color: red; }
+body {  font-family: Monaco; 
+  font-size: 15px; line-height: 25px; background: black; padding: 0; margin: 0; }
+  
+h1 { font-size: 120%; color: white; text-align: center; margin-top: 1em; }
+#tests { -webkit-column-count: 2; -webkit-column-gap: 10px; margin: 0 10px; }
+
+.test { margin: 10px 0; padding: 5px; background: #122; }
+
+p { margin: 0; }
+.pass code { color: #BEFFBC; }
+.fail code { color: #FFC0BC; }
+
+.comment { color: #aaa; font-style: italic; font-size: 0.9em; line-height: 25px;  }
+.match_name { font-size: 0.8em; float: left; color: #666;  }
+.match_name:after { content: '»'; margin: 0 0.5em; }
+
+.input {  color: white; display: inline-block; padding: 0 2px;  }
+
+code { background: #333; color: white; font-family: Monaco; line-height: 25px; font-size: 0.9em; margin-left: 1em; }
 </style>
 
-<script src="/ometa-r45/lib.js"></script>
-<script src="/ometa-r45/ometa-base.js"></script>
-<script src="/ometa-r45/parser.js"></script>
-<script src="/ometa-r45/bs-js-compiler.js"></script>
-<script src="/ometa-r45/bs-ometa-compiler.js"></script>
-<script src="/ometa-r45/bs-ometa-optimizer.js"></script>
-<script src="/ometa-r45/bs-ometa-js-compiler.js"></script>
+<script src="/ometa/lib.js"></script>
+<script src="/ometa/ometa-base.js"></script>
+<script src="/ometa/parser.js"></script>
+<script src="/ometa/bs-js-compiler.js"></script>
+<script src="/ometa/bs-ometa-compiler.js"></script>
+<script src="/ometa/bs-ometa-optimizer.js"></script>
+<script src="/ometa/bs-ometa-js-compiler.js"></script>
 
 <script>
 function translateCode(s) {
@@ -23,171 +40,63 @@ function translateCode(s) {
 function ometa(s) { return eval(translateCode(s)) }
 </script>
 
-<script type="text/x-ometa-js" id="ometa">
+<script type="text/x-ometa-js" id="parser">
 <%= read("parser.ojs") %>
 </script>
 
-<!-- compiles OmetaJS code above  -->
-<script>ometa(document.getElementById('ometa').innerText)</script>
+<!-- ometa() is a compiler -->
+<script>ometa(document.getElementById('parser').innerText)</script>
 
 <script>
-function match(matcher, str, expectation) {
-  test(matcher,str,expectation,'match')
+function match(comment, matcher, str, expectation) {
+  test(comment,matcher,str,expectation,'match')
 }
 
 function matchAll(matcher, str, expectation) {
-  test(matcher,str,expectation,'matchAll')
+  test(comment,matcher,str,expectation,'matchAll')
 }
 
-function test(matcher, str, expectation, type) {
+function test(comment, matcher, str, expectation, type) {
   // todo: catch failing match
   var result = DSParser.matchAll(str,matcher);
   var status = result.toString() == expectation.toString() ? 'pass' : 'fail';
-  var element = document.createElement('p');
-  element.className = status;
-  element.innerHTML = result.toString();
-  document.body.appendChild(element);
+  var element = document.createElement('div');
+  element.className = "test " + status;
+  
+  var matchName = document.createElement('span');
+  matchName.className = "match_name";
+  matchName.innerText = matcher;
+  element.appendChild(matchName);
+  
+  var cmnt = document.createElement('p');
+  cmnt.className = "comment";
+  cmnt.innerText = comment;
+  element.appendChild(cmnt)
+  
+  var input = document.createElement('span');
+  input.className = "input";
+  input.innerText = str;
+  element.appendChild(input);
+  
+  var out = document.createElement('code');
+  out.innerHTML = result.toString();
+  element.appendChild(out);
+  
+  document.getElementById('tests').appendChild(element);
 }
+
 </script>
 
-<script>
+<h1>Parser Tests</h1>
+
+<div id="tests"></div>
+
+<script id="tests">
 // Parser tests
-
-// basic integers
-
-match('integer', '1', 
-  ['int', '1']
-);
-
-match('integer', '1234', 
-  ['int', '1234']
-);
-
-// single and double quoted strings
-
-match('string', '"somestring"', 
-  ['str', 'somestring']
-);
-
-match('string', '\'somestring\'', 
-  ['str', 'somestring']
-);
-
-// symbols
-
-match('symbol', ":bar",
-  ['sym', 'bar']
-);
-
-match('symbol', ":bar1",
-  ['sym', 'bar1']
-);
-
-// todo: :+, :- ... etc
-
-// comma separated arrays of literals
-
-match('array', "1,2,3",
-  ['arr', ['int', '1'], ['int', '2'], ['int', '3']]
-);
-
-match('array', "1 , 2 , 3",
-  ['arr', ['int', '1'], ['int', '2'], ['int', '3']]
-);
-
-// space separated arrays of literals 
-
-match('array', "1 'foo' :bar",
-  ['arr', ['int', '1'], ['str', 'foo'], ['sym', 'bar']]
-);
-
-// spaces and commas with literals
-
-match('array', "1 'foo', :bar",
-  ['arr', ['int', '1'], ['str', 'foo'], ['sym', 'bar']]
-);
-
-// variable access or function call with no receiver and no args
-
-match('vcall', 'bar',
-  ['vcall', 'bar']
-);
-
-match('vcall', 'bar;',
-  ['vcall', 'bar']
-);
-
-// literal expression
-
-match('exp', '1',
-  ['int', '1']
-);
-
-match('exp', 'bar',
-  ['vcall', 'bar']
-);
-
-// array where first element is a vcall and the rest are literals
-
-match('array', "foo, 1 :bar",
-  ['arr', ['vcall', 'foo'], ['int', '1'], ['sym', 'bar']]
-);
-
-// array of vcalls
-
-match('array', "foo, bar, baz",
-  ['arr', ['vcall', 'foo'], ['vcall', 'bar'], ['vcall', 'baz']]
-);
-
-// function call with no braces and one literal arg
-match('fcall', "foo 1",
-  ['fcall', 'foo', ['arr', ['int', 1]]]
-);
-
-// function call with braces and one literal arg
-match('fcall', "foo(1)",
-  ['fcall', 'foo', ['arr', ['int', 1]]]
-);
-
-// function call with two literal args
-match('fcall', "foo 1 :bar",
-  ['fcall', 'foo', ['arr', ['int', 1], ['sym', 'bar']]]
-);
-
-// function call with vcall arg
-match('fcall', "foo bar",
-  ['fcall', 'foo', ['arr', ['vcall', 'bar']]]
-);
-
-// function call with vcall args
-match('fcall', "foo bar, baz",
-  ['fcall', 'foo', ['arr', ['vcall', 'bar'],['vcall', 'baz']]]
-);
-
-// array with fcall element, note that the literals after foo become args to foo ... might be worth throwing a warning here
-match('array', "bar, :baz, foo 'x', 1",
-  ['arr', 
-    ['vcall', 'bar'], 
-    ['sym', 'baz'], 
-    ['fcall', 'foo', ['arr', ['str', 'x'], ['int', '1']]]
-  ]
-);
-
-// array 
-match('array', "bar, :baz, foo('x'), 1",
-  ['arr', 
-    ['vcall', 'bar'], 
-    ['sym', 'baz'], 
-    ['fcall', 'foo', ['arr', ['str', 'x']]],
-    ['int', '1']
-  ]
-);
-
-// function call with vcall and literal args
-match('fcall', "foo bar, baz, 1, :x",
-  ['fcall', 'foo', ['arr', ['vcall', 'bar'],['vcall', 'baz'],['int','1'],['sym','x']]]
-);
-
-// 
+<%= read('numeric.js') %>
+<%= read('stringish.js') %>
+<%= read('listish.js') %>
+<%= read('calls.js') %>
 </script>
-</body>
+
+</body></html>
