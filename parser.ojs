@@ -1,0 +1,34 @@
+// todo: allow more stuff as first char of symbol
+// todo: support string interpoloation
+
+ometa DSParser {
+  
+  integer = ^digit+:d                                                         -> [`int, d.join('')],
+  
+  escapeChar   = '\\' char:c                                                  -> unescape('\\' + c),
+  string       = '\'' (escapeChar | ~'\'' char)*:cs '\''                      -> [`str, cs.join('')]
+               | '"'  (escapeChar | ~'"'  char)*:cs '"'                       -> [`str, cs.join('')],
+  
+  idFirst = letter | '_',
+  idRest  = idFirst | digit,
+  identifier = firstAndRest(`idFirst, `idRest):i                              -> [`idn, i.join('')],
+  
+  // use when you want to reduce [`idn, 'foo'] to just `foo
+  name = identifier:i                                                         -> i[1],
+  
+  // same as: ":" "idn":i
+  symbol = ':' identifier:i                                                   -> [`sym, i[1]],
+  
+  literal = symbol | string | integer,
+  
+  exp = fcall | vcall | literal,
+  exp_end = end | ',' | '\n' | ';',
+  
+  // supports vcalls and literals
+  array = exp:first ((spaces ',' spaces exp) | (spaces literal))*:rest        -> [`arr, first].concat(rest),
+  
+  vcall = identifier:i spaces &exp_end                                        -> [`vcall, i[1]],
+  
+  fcall = name:n ( '(' | spaces ) array:a ( ')' | empty) &exp_end             -> [`fcall, n].concat([a])
+  
+}

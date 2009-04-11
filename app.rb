@@ -7,6 +7,13 @@ require 'sinatra'
 set :views, Sinatra::Application.root
 set :public, Sinatra::Application.root
 
+helpers do
+  def read(file)
+    File.read("#{options.views}/#{file}")
+  end
+end
+
+
 get '/' do
   content_type 'text/html'
   erb :tests
